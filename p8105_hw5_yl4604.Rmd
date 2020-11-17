@@ -1,0 +1,200 @@
+---
+title: "homework5"
+author: "Yu"
+date: "November 13, 2020"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+
+knitr::opts_chunk$set(
+	fig.width = 6, 
+  fig.asp = .6,
+  out.width = "90%"
+)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+
+##problem 1
+
+```{r}
+homicide_df = read_csv('data/homicide-data.csv') %>% 
+  mutate(city_state = str_c(city, "_", state)) %>% 
+  mutate(result = case_when(
+    disposition == 'Closed without arrest' ~ 'unsolved',
+    disposition == 'Open/No arrest' ~ 'unsolved',
+    disposition == 'Closed by arrest' ~ 'solved'
+  )) %>% 
+  select(city_state, result) %>% 
+  filter(city_state != 'Tulsa_AL') %>% 
+  group_by(city_state) %>% 
+  summarize(
+    hom_total = n(),
+    hom_unsolved = sum(result == 'unsolved')) 
+
+```
+
+
+
+```{r}
+Baltimore_test = 
+  prop.test(
+    homicide_df %>%filter(city_state == 'Baltimore_MD') %>% pull(hom_unsolved),
+    homicide_df %>%filter(city_state == 'Baltimore_MD') %>% pull(hom_total))%>% 
+    broom::tidy()
+
+test_result = 
+  homicide_df %>% 
+    mutate(prop_test = map2(.y = hom_total, .x = hom_unsolved, ~prop.test(x =.x, n = .y)),
+           prop_test = map(prop_test, broom::tidy)) %>% 
+  unnest(prop_test)
+
+```
+
+
+Plot
+
+```{r}
+test_result %>% 
+  mutate(city_state = fct_reorder(city_state, estimate)) %>% 
+  ggplot(aes(x = city_state, y = estimate)) + geom_point()+
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+
+##Problem2
+
+```{r}
+file = tibble(
+  file_name = list.files('data/data/')
+) %>% 
+  mutate(
+    path = str_c('data/data/'，file_name)) %>% 
+  mutate(  
+    data = map(.x = path, ~read_csv(.x)) 
+       ) %>% 
+  unnest(data) %>% 
+  separate(file_name, into = c('type','id'), sep = c('_')) %>% 
+  mutate(id = str_extract(id, '^[0-9][0-9]')) %>% 
+  mutate(id = as.numeric(id)) %>% 
+  select(-path)
+
+file[1,]
+
+file_tidy = 
+  file %>% 
+  pivot_longer(week_1:week_8,
+    names_to = 'week',
+    names_prefix = 'week_',
+    values_to = 'data',
+  ) %>% 
+  relocate(id)
+```
+
+Plot
+???what is spaghetti plot?
+```{r}
+library(data.table)
+# your data
+df <- data.table(ID=c(1,1,2,2,2,3),
+                 Result=c(70,80,90,89,99,23),
+                 Days=c(0,23,15,30,40,24))
+
+# adjust each ID to start at day 0, sort
+df <- merge(df, df[, list(min_day=min(Days)), by=ID], by='ID')
+df[, adj_day:=Days-min_day]
+df <- df[order(ID, Days)]
+
+file_tidy %>% 
+  ggplot(aes(x = week, y=data, group = type, color=factor(type))) +
+    geom_line() + geom_point() +
+    theme_bw()
+```
+
+
+##Problem 3
+
+????this doesn't work
+```{r}
+n = 30
+sigma = 5
+mu= 0
+
+sim_result = data.frame(matrix(,nrow = 30, ncols = 1))
+
+for(i in 1:30){
+  sim_result[i,1] = mean(rnorm(30, 0, 5))
+                
+}
+
+```
+
+
+??This doesn't work, neither
+```{r}
+n = 30
+sigma = 5
+mu= 0
+
+output = vector('list', length = 10)
+
+for (i in 1:10){
+  
+  output[[i]] = rnorm(n, mu, sigma)
+}
+
+?#bind_rows(output)
+
+```
+
+
+```{r}
+n = 30
+sigma = 5
+mu= 0
+
+sample = function(n, mean, sd){
+  samp_data = tibble(
+    samp = rnorm(30, 0, 5)
+    )
+  samp_result = 
+    samp_data %>% 
+    mutate(t_test = map(.x = samp, ~t.test(x = .x, alternative = 'two.sided', paired = FALSE, conf.level = 0.95))) %>% 
+    summarize(mu_hat = mean(samp))
+  
+  return(samp_result)
+}
+
+sample(n, mu, sigma)
+```
+
+```{r}
+sim_results = 
+  rerun(10, sample(n, mu, sigma)) %>% 
+  bind_rows() %>% 
+  
+```
+
+
+```{r}
+mu_list = list(1, 2, 3, 4, 5, 6)
+output = vector('list'，length = 6)
+for(i in 1:6)(
+   output[[i]] = rerun(10, sample(n, mu_list[[i]], sigma)) %>% 
+                  bind_rows()
+)
+```
+
