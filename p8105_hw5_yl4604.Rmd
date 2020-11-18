@@ -105,60 +105,20 @@ file_tidy =
 ```
 
 Plot
-???what is spaghetti plot?
+
 ```{r}
-library(data.table)
-# your data
-df <- data.table(ID=c(1,1,2,2,2,3),
-                 Result=c(70,80,90,89,99,23),
-                 Days=c(0,23,15,30,40,24))
-
-# adjust each ID to start at day 0, sort
-df <- merge(df, df[, list(min_day=min(Days)), by=ID], by='ID')
-df[, adj_day:=Days-min_day]
-df <- df[order(ID, Days)]
-
-file_tidy %>% 
-  ggplot(aes(x = week, y=data, group = type, color=factor(type))) +
-    geom_line() + geom_point() +
-    theme_bw()
+file_tidy %>%
+  mutate(id = as.factor(id)) %>% 
+  ggplot(aes(x = week, y = data,group = id, color = id))+ geom_line()+
+  facet_grid(~type)
 ```
+
+The control arm's overal level is lower than experiment arm.
+
+There is a uptrend in the experiment arm but no such trend in control arm.
 
 
 ##Problem 3
-
-????this doesn't work
-```{r}
-n = 30
-sigma = 5
-mu= 0
-
-sim_result = data.frame(matrix(,nrow = 30, ncols = 1))
-
-for(i in 1:30){
-  sim_result[i,1] = mean(rnorm(30, 0, 5))
-                
-}
-
-```
-
-
-??This doesn't work, neither
-```{r}
-n = 30
-sigma = 5
-mu= 0
-
-output = vector('list', length = 10)
-
-for (i in 1:10){
-  
-  output[[i]] = rnorm(n, mu, sigma)
-}
-
-?#bind_rows(output)
-
-```
 
 
 ```{r}
@@ -183,6 +143,7 @@ samp_mean_tt(30, 0, 5)
 
 simulation on mu = 0
 ```{r}
+set.seed(426)
 sim_results = 
   rerun(5000, samp_mean_tt(30, 0, 5)) %>% 
   bind_rows()
@@ -190,60 +151,54 @@ sim_results =
 ```
 
 
-```{r}
-sim = function(n)
-```
 
 
 ```{r}
-mu_list = list(1, 2, 3, 4, 5, 6)
-output = vector('list'，length = 6)
-for(i in 1:6)(
-   output[[i]] = rerun(10, samp_mean_tt(30, mu_list[[i]], 5)) %>% 
-                  bind_rows()
-)
-```
-
-
-```{r}
+set.seed(426)
 output = tibble(
-  mu = c(1, 2, 3, 4, 5, 6)
+  mu = c(0, 1, 2, 3, 4, 5, 6)
 ) %>% 
-  mutate(sim_result = map(.x = mu, ~rerun(100,samp_mean_tt(30, .x, 5))),
+  mutate(sim_result = map(.x = mu, ~rerun(5000,samp_mean_tt(30, .x, 5))),
          sim_result_df = map(.x = sim_result, ~bind_rows(.x))) %>% 
   select(-sim_result) %>% 
-  unnest(sim_result_df)
+  unnest(sim_result_df) %>% 
+  mutate(test_result = case_when(
+    p_value < 0.5 ~ 1,
+    p_value >= 0.5 ~ 0
+  )) 
 
 ```
+
 
 
 ```{r}
 output %>% 
-  mutate(test_result = case_when(
-    p_value < 0.5 ~ 1,
-    p_value >= 0.5 ~ 0
-  )) %>% 
   group_by(mu) %>% 
   summarize(
-    rej_prop = sum(test_result)/10
+    rej_prop = sum(test_result)/5000
   ) %>% 
   ggplot(aes(x = mu, y = rej_prop)) + geom_point() + geom_line()
 ```
 
+when the effect size increases, the power also increases.
 
 ```{r}
+all_data =
+  output %>% 
+    group_by(mu) %>% 
+    summarise(mean_total = mean(mean))
+null_rej = 
+  output %>% 
+  filter(test_result == 1) %>% 
+  group_by(mu) %>% 
+  summarise(mean_rej = mean(mean))
+combined_data = left_join(all_data, null_rej, by = 'mu')
 
-test_result = function(p){
-  return(ifelse(p < 0.5, TRUE, FALSE))
-}
+combined_data %>% 
+  pivot_longer(mean_total:mean_rej, names_to = 'total/rej', values_to ='mean_value' ) %>% 
+  ggplot(aes(x = mu, y = mean_value, color = `total/rej`)) + geom_line(size = .4, alpha = 0.5)
+  
 
-pull(output, sim_result_df[1]) %>% 
-  mutate(test_result = map(.x = p_value, ~test_result(.x))) %>% 
-  summarize(prop = sum(test_result)/10)
 ```
 
-
- samp_result = 
-    samp_data %>% 
-    mutate(t_test = t.test(samp_data, alternative = 'two.sided')) %>% 
-    summarize(mu_hat = mean(samp))
+comparing to sample average of all samples, the sample average of μ^ across tests for which the null is rejected are slightly bigger especially when true mean is relatively small. This is because the smaller the effect size, the small the power, so some false null hypothesis were filed to reject.
