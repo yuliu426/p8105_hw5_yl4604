@@ -162,30 +162,36 @@ for (i in 1:10){
 
 
 ```{r}
-n = 30
-sigma = 5
-mu= 0
 
-sample = function(n, mean, sd){
+samp_mean_tt = function(n, mean, sd){
   samp_data = tibble(
-    samp = rnorm(30, 0, 5)
+    samp = rnorm(n, mean, sd)
     )
-  samp_result = 
-    samp_data %>% 
-    mutate(t_test = map(.x = samp, ~t.test(x = .x, alternative = 'two.sided', paired = FALSE, conf.level = 0.95))) %>% 
-    summarize(mu_hat = mean(samp))
+ 
   
+  samp_result = tibble(
+     t.test(samp_data$samp, alternative = 'two.sided', mu = 0) %>% broom::tidy() %>% select(estimate) %>% rename('mean' = estimate),
+     t.test(samp_data$samp, alternative = 'two.sided', mu = 0) %>% broom::tidy() %>% select(p.value) %>% rename('p_value' = p.value)
+)
+  
+
   return(samp_result)
 }
 
-sample(n, mu, sigma)
+samp_mean_tt(30, 0, 5)
 ```
 
+simulation on mu = 0
 ```{r}
 sim_results = 
-  rerun(10, sample(n, mu, sigma)) %>% 
-  bind_rows() %>% 
+  rerun(5000, samp_mean_tt(30, 0, 5)) %>% 
+  bind_rows()
   
+```
+
+
+```{r}
+sim = function(n)
 ```
 
 
@@ -193,8 +199,51 @@ sim_results =
 mu_list = list(1, 2, 3, 4, 5, 6)
 output = vector('list'，length = 6)
 for(i in 1:6)(
-   output[[i]] = rerun(10, sample(n, mu_list[[i]], sigma)) %>% 
+   output[[i]] = rerun(10, samp_mean_tt(30, mu_list[[i]], 5)) %>% 
                   bind_rows()
 )
 ```
 
+
+```{r}
+output = tibble(
+  mu = c(1, 2, 3, 4, 5, 6)
+) %>% 
+  mutate(sim_result = map(.x = mu, ~rerun(100,samp_mean_tt(30, .x, 5))),
+         sim_result_df = map(.x = sim_result, ~bind_rows(.x))) %>% 
+  select(-sim_result) %>% 
+  unnest(sim_result_df)
+
+```
+
+
+```{r}
+output %>% 
+  mutate(test_result = case_when(
+    p_value < 0.5 ~ 1,
+    p_value >= 0.5 ~ 0
+  )) %>% 
+  group_by(mu) %>% 
+  summarize(
+    rej_prop = sum(test_result)/10
+  ) %>% 
+  ggplot(aes(x = mu, y = rej_prop)) + geom_point() + geom_line()
+```
+
+
+```{r}
+
+test_result = function(p){
+  return(ifelse(p < 0.5, TRUE, FALSE))
+}
+
+pull(output, sim_result_df[1]) %>% 
+  mutate(test_result = map(.x = p_value, ~test_result(.x))) %>% 
+  summarize(prop = sum(test_result)/10)
+```
+
+
+ samp_result = 
+    samp_data %>% 
+    mutate(t_test = t.test(samp_data, alternative = 'two.sided')) %>% 
+    summarize(mu_hat = mean(samp))
